@@ -76,4 +76,5 @@ if user_input:
     with st.spinner("Thinking..."):
         context_blocks = search_documents(user_input)
         if not context_blocks:
-            st.warning("⚠️ No releva
+            st.warning("⚠️ No relevant data found in search index.")
+
