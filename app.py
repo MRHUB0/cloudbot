@@ -6,13 +6,13 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
 # --- CONFIG ---
-AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"  # ✅ Confirmed
+AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"  # ✅ Your OpenAI endpoint
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-DEPLOYMENT_NAME = "SmartBotX"  # ✅ This is your actual Azure deployment name
+DEPLOYMENT_NAME = "SmartBotX"  # ✅ Your OpenAI deployment name
 
-SEARCH_SERVICE = "smartbot-search"
+SEARCH_SERVICE = "smartbot-cheapsearch"  # ✅ NEW Free-tier Search service name
 SEARCH_INDEX = "smartbot-index"
-SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")
+SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")  # or paste admin key for testing
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
 
 # --- INIT AZURE OPENAI CLIENT ---
@@ -56,9 +56,7 @@ Answer:
     try:
         response = client.chat.completions.create(
             model=DEPLOYMENT_NAME,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=400
         )
@@ -78,9 +76,4 @@ if user_input:
     with st.spinner("Thinking..."):
         context_blocks = search_documents(user_input)
         if not context_blocks:
-            st.warning("⚠️ No relevant data found in search index.")
-            response = ask_smartbot(user_input, "No additional context.")
-        else:
-            context = "\n\n".join(context_blocks)
-            response = ask_smartbot(user_input, context)
-        st.success(response)
+            st.warning("⚠️ No releva
