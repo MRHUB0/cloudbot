@@ -6,9 +6,9 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
 # --- CONFIG ---
-AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"  # ✅ Confirm this matches your Azure OpenAI endpoint
+AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"  # ✅ Confirmed
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-DEPLOYMENT_NAME = "version0125"  # This must be your deployment name in Azure
+DEPLOYMENT_NAME = "SmartBotX"  # ✅ This is your actual Azure deployment name
 
 SEARCH_SERVICE = "smartbot-search"
 SEARCH_INDEX = "smartbot-index"
