@@ -6,12 +6,12 @@ from azure.search.documents import SearchClient
 
 # --- CONFIG ---
 AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"
-AZURE_OPENAI_KEY = "0Gj2jRfz5dXSh8rw5nyt6bOqDZPYKX2wLVTKKDKnw3AzSeDIxC0J"
+AZURE_OPENAI_KEY = "AZURE_OPENAI_KEY"
 DEPLOYMENT_NAME = "version0125"
 
 SEARCH_SERVICE = "smartbot-search"
 SEARCH_INDEX = "smartbot-index"
-SEARCH_API_KEY = "DcwUcnNIpCY8rS557bWp3NnV7beWizQAzrMlaNXD8CE88ga5FXMgJQQJ99BFACYeBjFXJ3w3AAABACOGE2Xt"
+SEARCH_API_KEY = "AZURE_SEARCH_KEY"
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
 
 openai.api_type = "azure"
