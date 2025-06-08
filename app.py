@@ -1,17 +1,18 @@
 # app.py
+import os
 import streamlit as st
 import openai
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
 # --- CONFIG ---
-AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"
-AZURE_OPENAI_KEY = "AZURE_OPENAI_KEY"
-DEPLOYMENT_NAME = "version0125"
+AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"  # ✅ Double-check this is your exact Azure OpenAI resource endpoint
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+DEPLOYMENT_NAME = "version0125"  # Your deployed model in Azure OpenAI
 
 SEARCH_SERVICE = "smartbot-search"
 SEARCH_INDEX = "smartbot-index"
-SEARCH_API_KEY = "AZURE_SEARCH_KEY"
+SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
 
 openai.api_type = "azure"
