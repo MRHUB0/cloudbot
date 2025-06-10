@@ -1,4 +1,3 @@
-# app.py
 import os
 import streamlit as st
 from openai import AzureOpenAI
@@ -10,9 +9,9 @@ AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"  # ✅ Your OpenAI
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
 DEPLOYMENT_NAME = "SmartBotX"  # ✅ Your OpenAI deployment name
 
-SEARCH_SERVICE = "smartbot-cheapsearch"  # ✅ NEW Free-tier Search service name
+SEARCH_SERVICE = "smartbot-cheapsearch"  # ✅ Your Azure Search service name
 SEARCH_INDEX = "smartbot-index"
-SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")  # or paste admin key for testing
+SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")  # or paste your admin key
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
 
 # --- INIT AZURE OPENAI CLIENT ---
@@ -22,7 +21,7 @@ client = AzureOpenAI(
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
 
-# --- SEARCH FUNCTION WITH DEBUGGING ---
+# --- SEARCH FUNCTION ---
 def search_documents(query, top_k=3):
     st.info(f"🔍 Searching for: '{query}' in Azure Cognitive Search")
     try:
@@ -34,7 +33,7 @@ def search_documents(query, top_k=3):
         results = client_search.search(search_text=query, top=top_k)
         contents = []
         for r in results:
-            content = r.get("content", "")
+            content = r.get("content", "") or r.get("text", "")
             st.write("📄 Document snippet:", content[:100])  # Show preview
             contents.append(content)
         st.success(f"✅ Retrieved {len(contents)} document(s) from index.")
@@ -77,4 +76,8 @@ if user_input:
         context_blocks = search_documents(user_input)
         if not context_blocks:
             st.warning("⚠️ No relevant data found in search index.")
-
+        else:
+            context = "\n\n".join(context_blocks)
+            answer = ask_smartbot(user_input, context)
+            st.markdown("### 🤖 SmartBot says:")
+            st.write(answer)
