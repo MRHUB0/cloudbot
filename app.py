@@ -5,13 +5,13 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
 # --- CONFIG ---
-AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"  # ✅ Your OpenAI endpoint
+AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-DEPLOYMENT_NAME = "SmartBotX"  # ✅ Your OpenAI deployment name
+DEPLOYMENT_NAME = "SmartBotX"
 
-SEARCH_SERVICE = "smartbot-cheapsearch"  # ✅ Your Azure Search service name
+SEARCH_SERVICE = "smartbot-cheapsearch"
 SEARCH_INDEX = "smartbot-index"
-SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")  # or paste your admin key
+SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
 
 # --- INIT AZURE OPENAI CLIENT ---
@@ -32,12 +32,28 @@ def search_documents(query, top_k=3):
         )
         results = client_search.search(search_text=query, top=top_k)
         contents = []
+
         for r in results:
-            content = r.get("content", "") or r.get("text", "")
-            st.write("📄 Document snippet:", content[:100])  # Show preview
-            contents.append(content)
+            raw_content = r.get("content", "") or r.get("text", "") or str(r)
+
+            if isinstance(raw_content, dict):
+                text = raw_content.get("text", "") or raw_content.get("content", "")
+            elif isinstance(raw_content, str):
+                try:
+                    import json
+                    maybe_dict = json.loads(raw_content)
+                    text = maybe_dict.get("text", "") or maybe_dict.get("content", raw_content)
+                except:
+                    text = raw_content
+            else:
+                text = str(raw_content)
+
+            st.write("📄 Document snippet:", text[:100])
+            contents.append(text)
+
         st.success(f"✅ Retrieved {len(contents)} document(s) from index.")
         return contents
+
     except Exception as e:
         st.error(f"❌ Search failed: {e}")
         return []
@@ -73,11 +89,14 @@ user_input = st.text_input("Ask something:")
 
 if user_input:
     with st.spinner("Thinking..."):
-        context_blocks = search_documents(user_input)
+        context_blocks = search_documents(user_input, top_k=3)
         if not context_blocks:
             st.warning("⚠️ No relevant data found in search index.")
         else:
-            context = "\n\n".join(context_blocks)
-            answer = ask_smartbot(user_input, context)
+            # --- Token-safe trimming ---
+            joined_context = "\n\n".join(context_blocks[:3])  # Limit to top 3 chunks
+            safe_context = joined_context[:10000]  # Approx. 2500–3000 tokens
+
+            answer = ask_smartbot(user_input, safe_context)
             st.markdown("### 🤖 SmartBot says:")
             st.write(answer)
