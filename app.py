@@ -5,7 +5,7 @@ from pathlib import Path
 from openai import AzureOpenAI
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
-from rss_parser import fetch_rss_to_jsonl  # External script for RSS → JSONL
+from rss_parser import fetch_rss_to_jsonl
 
 # --- CONFIG ---
 AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"
@@ -82,24 +82,41 @@ Answer:
         st.error(f"❌ GPT call failed: {e}")
         return "Sorry, I couldn't process your request right now."
 
-# --- STREAMLIT UI ---
+# --- STREAMLIT UI SETUP ---
 st.set_page_config(page_title="SmartBot", layout="centered")
 
-# Logo and Header
-logo_path = Path(__file__).parent / "logo.jpg"
+# --- Mode Switcher ---
+mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
+
+# --- Load Correct Logo ---
+logo_path = Path(__file__).parent / ("logo.jpg" if "Nature" in mode else "Torah.jfif")
 if logo_path.exists():
     st.image(str(logo_path), width=120)
 
-st.markdown("<h1 style='text-align: center;'>🌿 Nature’s Pleasure: SmartBot</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Ask about Torah, herbs, HR, or your data.</p>", unsafe_allow_html=True)
+# --- Themed Header ---
+if "Nature" in mode:
+    st.markdown(
+        "<div style='text-align:center;background-color:#1e1e1e;padding:15px;border-radius:10px;'>"
+        "<h1 style='color:#91d18b;'>🌿 Nature’s Pleasure Bot</h1>"
+        "<p style='color:#bbbbbb;'>Ask about herbs, teas, or holistic healing.</p>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        "<h1 style='text-align: center; color: #3b3b3b;'>🕎 Torah SmartBot</h1>"
+        "<p style='text-align: center;'>Ask about scripture, history, and Hebrew context.</p>",
+        unsafe_allow_html=True
+    )
 
-# RSS Refresh Button
-if st.button("🔄 Refresh Herbal Feeds"):
-    with st.spinner("Fetching latest herbal knowledge..."):
-        articles = fetch_rss_to_jsonl()
-        st.success(f"✅ {len(articles)} herbal articles parsed and saved.")
+# --- RSS Refresh (Only for Nature) ---
+if "Nature" in mode:
+    if st.button("🔄 Refresh Herbal Feeds"):
+        with st.spinner("Fetching latest herbal knowledge..."):
+            articles = fetch_rss_to_jsonl()
+            st.success(f"✅ {len(articles)} herbal articles parsed and saved.")
 
-# Input field
+# --- Chat UI ---
 user_input = st.text_input("💬 Ask something:")
 
 if user_input:
