@@ -3,3 +3,6 @@ streamlit
 azure-search-documents
 azure-core
 python-dotenv
+feedparser
+html2text
+beautifulsoup4
