@@ -1,8 +1,11 @@
 import os
+import json
 import streamlit as st
+from pathlib import Path
 from openai import AzureOpenAI
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
+from rss_parser import fetch_rss_to_jsonl  # External script for RSS → JSONL
 
 # --- CONFIG ---
 AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"
@@ -40,7 +43,6 @@ def search_documents(query, top_k=3):
                 text = raw_content.get("text", "") or raw_content.get("content", "")
             elif isinstance(raw_content, str):
                 try:
-                    import json
                     maybe_dict = json.loads(raw_content)
                     text = maybe_dict.get("text", "") or maybe_dict.get("content", raw_content)
                 except:
@@ -82,10 +84,23 @@ Answer:
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="SmartBot", layout="centered")
-st.title("🤖 SmartBot")
-st.markdown("Ask Torah, Herbs, HR, or anything from your data.")
 
-user_input = st.text_input("Ask something:")
+# Logo and Header
+logo_path = Path(__file__).parent / "logo.jpg"
+if logo_path.exists():
+    st.image(str(logo_path), width=120)
+
+st.markdown("<h1 style='text-align: center;'>🌿 Nature’s Pleasure: SmartBot</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Ask about Torah, herbs, HR, or your data.</p>", unsafe_allow_html=True)
+
+# RSS Refresh Button
+if st.button("🔄 Refresh Herbal Feeds"):
+    with st.spinner("Fetching latest herbal knowledge..."):
+        articles = fetch_rss_to_jsonl()
+        st.success(f"✅ {len(articles)} herbal articles parsed and saved.")
+
+# Input field
+user_input = st.text_input("💬 Ask something:")
 
 if user_input:
     with st.spinner("Thinking..."):
@@ -93,10 +108,8 @@ if user_input:
         if not context_blocks:
             st.warning("⚠️ No relevant data found in search index.")
         else:
-            # --- Token-safe trimming ---
-            joined_context = "\n\n".join(context_blocks[:3])  # Limit to top 3 chunks
-            safe_context = joined_context[:10000]  # Approx. 2500–3000 tokens
-
+            joined_context = "\n\n".join(context_blocks[:3])
+            safe_context = joined_context[:10000]
             answer = ask_smartbot(user_input, safe_context)
             st.markdown("### 🤖 SmartBot says:")
             st.write(answer)
