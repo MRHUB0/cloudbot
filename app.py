@@ -14,11 +14,12 @@ load_dotenv()
 # --- Azure Config from Environment ---
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")  # FIXED here
 
 SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
 AZURE_SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
+
 
 # --- UI Mode Switch ---
 mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
