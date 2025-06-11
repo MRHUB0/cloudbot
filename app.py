@@ -14,12 +14,11 @@ load_dotenv()
 # --- Azure Config from Environment ---
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")  # FIXED here
+DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 
 SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
 AZURE_SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
-
 
 # --- UI Mode Switch ---
 mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
@@ -75,7 +74,6 @@ if "Nature" in mode:
 
 # --- Search Function ---
 def search_documents(query, top_k=3):
-    st.info(f"🔍 Searching Azure Cognitive Search for: '{query}'")
     try:
         client_search = SearchClient(
             endpoint=SEARCH_ENDPOINT,
@@ -98,10 +96,8 @@ def search_documents(query, top_k=3):
             else:
                 text = str(raw_content)
 
-            st.write("📄 Document snippet:", text[:100])
             contents.append(text)
 
-        st.success(f"✅ Retrieved {len(contents)} document(s).")
         return contents
 
     except Exception as e:
@@ -130,17 +126,16 @@ Answer:
         st.error(f"❌ GPT call failed: {e}")
         return "Sorry, I couldn't process your request right now."
 
-# --- User Input & Bot Response ---
-user_input = st.text_input("💬 Ask something:")
+# --- User Input & Bot Response (Chat UI Style) ---
+user_input = st.chat_input("💬 Ask something...")
 
 if user_input:
+    st.chat_message("user").write(user_input)
     with st.spinner("Thinking..."):
         context_blocks = search_documents(user_input, top_k=3)
         if not context_blocks:
-            st.warning("⚠️ No relevant data found in search index.")
+            st.chat_message("assistant").write("⚠️ I couldn't find relevant documents to answer that.")
         else:
-            joined_context = "\n\n".join(context_blocks[:3])
-            safe_context = joined_context[:10000]  # Ensure token limit
+            safe_context = "\n\n".join(context_blocks[:3])[:10000]
             answer = ask_smartbot(user_input, safe_context)
-            st.markdown("### 🤖 SmartBot says:")
-            st.write(answer)
+            st.chat_message("assistant").write(answer)
