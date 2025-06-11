@@ -15,7 +15,6 @@ load_dotenv()
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
-
 SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
 AZURE_SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
@@ -72,6 +71,10 @@ if "Nature" in mode:
             articles = fetch_rss_to_jsonl()
             st.success(f"✅ {len(articles)} herbal articles parsed and saved.")
 
+# --- Chat History State ---
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
 # --- Search Function ---
 def search_documents(query, top_k=3):
     try:
@@ -95,11 +98,9 @@ def search_documents(query, top_k=3):
                     text = raw_content
             else:
                 text = str(raw_content)
-
             contents.append(text)
 
         return contents
-
     except Exception as e:
         st.error(f"❌ Search failed: {e}")
         return []
@@ -126,16 +127,23 @@ Answer:
         st.error(f"❌ GPT call failed: {e}")
         return "Sorry, I couldn't process your request right now."
 
-# --- User Input & Bot Response (Chat UI Style) ---
+# --- Chat Input UI ---
+for msg in st.session_state.chat_history:
+    st.chat_message(msg["role"]).write(msg["content"])
+
 user_input = st.chat_input("💬 Ask something...")
 
 if user_input:
     st.chat_message("user").write(user_input)
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+
     with st.spinner("Thinking..."):
         context_blocks = search_documents(user_input, top_k=3)
         if not context_blocks:
-            st.chat_message("assistant").write("⚠️ I couldn't find relevant documents to answer that.")
+            answer = "⚠️ I couldn't find relevant documents to answer that."
         else:
             safe_context = "\n\n".join(context_blocks[:3])[:10000]
             answer = ask_smartbot(user_input, safe_context)
-            st.chat_message("assistant").write(answer)
+
+    st.chat_message("assistant").write(answer)
+    st.session_state.chat_history.append({"role": "assistant", "content": answer})
