@@ -2,17 +2,21 @@ import os
 import json
 import streamlit as st
 from pathlib import Path
+from dotenv import load_dotenv
 from openai import AzureOpenAI
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from rss_parser import fetch_rss_to_jsonl
 
-# --- Azure Config ---
-AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-DEPLOYMENT_NAME = "SmartBotX"
+# --- Load Environment Variables ---
+load_dotenv()
 
-SEARCH_SERVICE = "smartbot-cheapsearch"
+# --- Azure Config from Environment ---
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+
+SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
 AZURE_SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
 
@@ -20,10 +24,23 @@ SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
 mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
 SEARCH_INDEX = "torah-index" if "Torah" in mode else "smartbot-index"
 
+# --- Validate Config ---
+required_vars = {
+    "AZURE_OPENAI_ENDPOINT": AZURE_OPENAI_ENDPOINT,
+    "AZURE_OPENAI_API_KEY": AZURE_OPENAI_API_KEY,
+    "DEPLOYMENT_NAME": DEPLOYMENT_NAME,
+    "SEARCH_SERVICE": SEARCH_SERVICE,
+    "AZURE_SEARCH_KEY": AZURE_SEARCH_KEY
+}
+missing = [k for k, v in required_vars.items() if not v]
+if missing:
+    st.error(f"❌ Missing required environment variables: {', '.join(missing)}")
+    st.stop()
+
 # --- Initialize Azure OpenAI Client ---
 client = AzureOpenAI(
-    api_key=AZURE_OPENAI_KEY,
-    api_version="2023-05-15",
+    api_key=AZURE_OPENAI_API_KEY,
+    api_version="2023-12-01-preview",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
 
@@ -48,7 +65,7 @@ else:
         unsafe_allow_html=True
     )
 
-# --- RSS Refresh Button for Nature ---
+# --- RSS Refresh Button for Nature Mode ---
 if "Nature" in mode:
     if st.button("🔄 Refresh Herbal Feeds"):
         with st.spinner("Fetching latest herbal knowledge..."):
@@ -57,7 +74,7 @@ if "Nature" in mode:
 
 # --- Search Function ---
 def search_documents(query, top_k=3):
-    st.info(f"🔍 Searching for: '{query}' in Azure Cognitive Search")
+    st.info(f"🔍 Searching Azure Cognitive Search for: '{query}'")
     try:
         client_search = SearchClient(
             endpoint=SEARCH_ENDPOINT,
@@ -69,7 +86,6 @@ def search_documents(query, top_k=3):
 
         for r in results:
             raw_content = r.get("content", "") or r.get("text", "") or str(r)
-
             if isinstance(raw_content, dict):
                 text = raw_content.get("text", "") or raw_content.get("content", "")
             elif isinstance(raw_content, str):
@@ -84,7 +100,7 @@ def search_documents(query, top_k=3):
             st.write("📄 Document snippet:", text[:100])
             contents.append(text)
 
-        st.success(f"✅ Retrieved {len(contents)} document(s) from index.")
+        st.success(f"✅ Retrieved {len(contents)} document(s).")
         return contents
 
     except Exception as e:
@@ -113,7 +129,7 @@ Answer:
         st.error(f"❌ GPT call failed: {e}")
         return "Sorry, I couldn't process your request right now."
 
-# --- Input Field and Bot Output ---
+# --- User Input & Bot Response ---
 user_input = st.text_input("💬 Ask something:")
 
 if user_input:
@@ -123,7 +139,7 @@ if user_input:
             st.warning("⚠️ No relevant data found in search index.")
         else:
             joined_context = "\n\n".join(context_blocks[:3])
-            safe_context = joined_context[:10000]
+            safe_context = joined_context[:10000]  # Ensure token limit
             answer = ask_smartbot(user_input, safe_context)
             st.markdown("### 🤖 SmartBot says:")
             st.write(answer)
