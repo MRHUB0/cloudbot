@@ -1,21 +1,28 @@
 import os
 import json
+import requests
 import streamlit as st
 from pathlib import Path
+from dotenv import load_dotenv
 from openai import AzureOpenAI
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from rss_parser import fetch_rss_to_jsonl
 
-# --- CONFIG ---
-AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-DEPLOYMENT_NAME = "SmartBotX"
+# --- Load environment variables ---
+load_dotenv()  # Safe for local testing; Azure will override in App Service
 
-SEARCH_SERVICE = "smartbot-cheapsearch"
-SEARCH_INDEX = "smartbot-index"
+# --- CONFIG ---
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
+
+SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
+SEARCH_INDEX = os.getenv("AZURE_SEARCH_INDEX")
 SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
+
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 
 # --- INIT AZURE OPENAI CLIENT ---
 client = AzureOpenAI(
@@ -23,6 +30,35 @@ client = AzureOpenAI(
     api_version="2023-05-15",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
+
+# --- Herb name detection list ---
+herbs = [
+    "mint", "chamomile", "ginger", "turmeric", "lemon balm", "peppermint",
+    "rosemary", "lavender", "echinacea", "dandelion", "fennel", "hibiscus",
+    "licorice", "lemongrass", "nettle", "sage", "thyme", "valerian"
+]
+
+def detect_herb(text):
+    for herb in herbs:
+        if herb.lower() in text.lower():
+            return herb
+    return None
+
+def fetch_herb_image(herb_name):
+    if not PEXELS_API_KEY:
+        st.warning("⚠️ Missing PEXELS_API_KEY environment variable.")
+        return None
+    headers = {"Authorization": PEXELS_API_KEY}
+    params = {"query": f"{herb_name} herb", "per_page": 1}
+    try:
+        response = requests.get("https://api.pexels.com/v1/search", headers=headers, params=params)
+        data = response.json()
+        if data["photos"]:
+            return data["photos"][0]["src"]["medium"]
+        return None
+    except Exception as e:
+        st.warning(f"Image fetch error: {e}")
+        return None
 
 # --- SEARCH FUNCTION ---
 def search_documents(query, top_k=3):
@@ -138,3 +174,10 @@ if user_input:
             answer = ask_smartbot(user_input, safe_context, username)
             st.markdown("### 🤖 SmartBot says:")
             st.write(answer)
+
+            if "Nature" in mode:
+                herb_detected = detect_herb(user_input)
+                if herb_detected:
+                    image_url = fetch_herb_image(herb_detected)
+                    if image_url:
+                        st.image(image_url, caption=f"{herb_detected.title()} Herb", use_column_width=True)
