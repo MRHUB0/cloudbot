@@ -55,7 +55,6 @@ def fetch_herb_image(herb_name):
         st.warning(f"Image fetch error: {e}")
         return None
 
-
 def ask_smartbot(question, context, username):
     prompt = f"""Use only the context below to answer the question. Personalize the response for {username}.
 
@@ -77,31 +76,37 @@ Answer:
         st.error(f"❌ GPT call failed: {e}")
         return "Sorry, I couldn't process your request right now."
 
-# --- Streamlit Page Setup ---
+def search_documents(query, top_k=3):
+    try:
+        client_search = SearchClient(
+            endpoint=f"https://{SEARCH_SERVICE}.search.windows.net",
+            index_name="torah-index" if "Torah" in st.session_state.mode else "smartbot-index",
+            credential=AzureKeyCredential(SEARCH_API_KEY)
+        )
+        results = client_search.search(search_text=query, top=top_k)
+        return [r.get("content", "") or r.get("text", "") or str(r) for r in results]
+    except Exception as e:
+        st.error(f"❌ Search error: {e}")
+        return []
+
+# --- Streamlit setup ---
 st.set_page_config(page_title="METATRACES-AI", page_icon="🤖", layout="centered")
 
-# --- User Name Entry ---
 username = st.text_input("🧑 Your name (nickname or first name is fine):")
 if not username:
     st.warning("Please enter your name to continue.")
     st.stop()
 
-# --- Chat History State ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# --- Mode Switcher ---
-mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
-SEARCH_INDEX = "torah-index" if "Torah" in mode else "smartbot-index"
-SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
+st.session_state.mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
 
-# --- Logo ---
-logo_path = Path(__file__).parent / ("logo.jpg" if "Nature" in mode else "Torah.jfif")
+logo_path = Path(__file__).parent / ("logo.jpg" if "Nature" in st.session_state.mode else "Torah.jfif")
 if logo_path.exists():
     st.image(str(logo_path), width=120)
 
-# --- Header ---
-if "Nature" in mode:
+if "Nature" in st.session_state.mode:
     st.markdown(
         f"<div style='text-align:center;background-color:#1e1e1e;padding:15px;border-radius:10px;'>"
         f"<h1 style='color:#91d18b;'>🌿 Nature’s Pleasure Bot</h1>"
@@ -116,38 +121,13 @@ else:
         unsafe_allow_html=True
     )
 
-# --- RSS Button ---
-if "Nature" in mode:
+if "Nature" in st.session_state.mode:
     if st.button("🔄 Refresh Herbal Feeds"):
         with st.spinner("Fetching latest herbal knowledge..."):
             articles = fetch_rss_to_jsonl()
             st.write("📦 Parsed Articles:", articles[:3])
             st.success(f"✅ {len(articles)} herbal articles parsed.")
 
-# --- Search Logic ---
-def search_documents(query, top_k=3):
-    try:
-        client_search = SearchClient(
-            endpoint=SEARCH_ENDPOINT,
-            index_name=SEARCH_INDEX,
-            credential=AzureKeyCredential(SEARCH_API_KEY)
-        )
-        results = client_search.search(search_text=query, top=top_k)
-        contents = []
-        for r in results:
-            raw_content = r.get("content", "") or r.get("text", "") or str(r)
-            try:
-                maybe_dict = json.loads(raw_content)
-                text = maybe_dict.get("text", "") or maybe_dict.get("content", raw_content)
-            except:
-                text = raw_content
-            contents.append(text)
-        return contents
-    except Exception as e:
-        st.error(f"❌ Search error: {e}")
-        return []
-
-# --- Chat Input ---
 user_input = st.chat_input("Ask me anything...")
 if user_input:
     st.session_state.chat_history.append({"role": "user", "content": user_input})
@@ -158,21 +138,14 @@ if user_input:
         else:
             safe_context = "\n\n".join(context_blocks)[:10000]
             bot_reply = ask_smartbot(user_input, safe_context, username)
-
     st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
 
-
-".join(context_blocks)[:10000]
-            bot_reply = ask_smartbot(user_input, safe_context, username)
-    st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
-
-# --- Display Chat History ---
 for msg in st.session_state.chat_history:
     if msg["role"] == "user":
         st.chat_message("user").markdown(msg["content"])
     else:
         st.chat_message("assistant").markdown(msg["content"])
-        if "Nature" in mode and st.session_state.chat_history:
+        if "Nature" in st.session_state.mode:
             herb_detected = detect_herb(st.session_state.chat_history[-2]["content"])
             if herb_detected:
                 image_url = fetch_herb_image(herb_detected)
