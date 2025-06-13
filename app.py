@@ -156,7 +156,11 @@ if user_input:
         if not context_blocks:
             bot_reply = "⚠️ No relevant data found in search index."
         else:
-            safe_context = "
+            safe_context = "\n\n".join(context_blocks)[:10000]
+            bot_reply = ask_smartbot(user_input, safe_context, username)
+
+    st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
+
 
 ".join(context_blocks)[:10000]
             bot_reply = ask_smartbot(user_input, safe_context, username)
