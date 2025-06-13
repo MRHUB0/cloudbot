@@ -20,6 +20,7 @@ DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
 SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
+PLANT_ID_API_KEY = os.getenv("PLANT_ID")
 
 client = AzureOpenAI(
     api_key=AZURE_OPENAI_KEY,
@@ -127,6 +128,31 @@ if "Nature" in st.session_state.mode:
             articles = fetch_rss_to_jsonl()
             st.write("📦 Parsed Articles:", articles[:3])
             st.success(f"✅ {len(articles)} herbal articles parsed.")
+
+    uploaded_file = st.file_uploader("📷 Upload a photo of a herb or fruit", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
+        with st.spinner("Identifying plant..."):
+            response = requests.post(
+                "https://api.plant.id/v2/identify",
+                headers={"Api-Key": PLANT_ID_API_KEY},
+                files={"images": (uploaded_file.name, uploaded_file, uploaded_file.type)},
+                data={"organs": "leaf"}
+            )
+            result = response.json()
+            if "suggestions" in result and result["suggestions"]:
+                plant_name = result["suggestions"][0]["plant_name"]
+                st.success(f"🌿 Identified as: **{plant_name}**")
+
+                context_blocks = search_documents(plant_name, top_k=3)
+                if context_blocks:
+                    safe_context = "\n\n".join(context_blocks)[:10000]
+                    answer = ask_smartbot(f"What are the benefits or uses of {plant_name}?", safe_context, username)
+                    st.markdown("### 🤖 SmartBot says:")
+                    st.write(answer)
+                else:
+                    st.warning("No info found in herbal index.")
+            else:
+                st.warning("❌ Couldn't identify the plant.")
 
 user_input = st.chat_input("Ask me anything...")
 if user_input:
