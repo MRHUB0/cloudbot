@@ -2,86 +2,36 @@ import os
 import json
 import streamlit as st
 from pathlib import Path
-from dotenv import load_dotenv
 from openai import AzureOpenAI
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from rss_parser import fetch_rss_to_jsonl
 
-# --- Load Environment Variables ---
-load_dotenv()
+# --- CONFIG ---
+AZURE_OPENAI_ENDPOINT = "https://smartbotx.openai.azure.com/"
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+DEPLOYMENT_NAME = "SmartBotX"
 
-# --- Azure Config from Environment ---
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
-SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
-AZURE_SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
+SEARCH_SERVICE = "smartbot-cheapsearch"
+SEARCH_INDEX = "smartbot-index"
+SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
 
-# --- UI Mode Switch ---
-mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
-SEARCH_INDEX = "torah-index" if "Torah" in mode else "smartbot-index"
-
-# --- Validate Config ---
-required_vars = {
-    "AZURE_OPENAI_ENDPOINT": AZURE_OPENAI_ENDPOINT,
-    "AZURE_OPENAI_API_KEY": AZURE_OPENAI_API_KEY,
-    "DEPLOYMENT_NAME": DEPLOYMENT_NAME,
-    "SEARCH_SERVICE": SEARCH_SERVICE,
-    "AZURE_SEARCH_KEY": AZURE_SEARCH_KEY
-}
-missing = [k for k, v in required_vars.items() if not v]
-if missing:
-    st.error(f"❌ Missing required environment variables: {', '.join(missing)}")
-    st.stop()
-
-# --- Initialize Azure OpenAI Client ---
+# --- INIT AZURE OPENAI CLIENT ---
 client = AzureOpenAI(
-    api_key=AZURE_OPENAI_API_KEY,
-    api_version="2023-12-01-preview",
+    api_key=AZURE_OPENAI_KEY,
+    api_version="2023-05-15",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
 
-# --- Load Logo ---
-logo_path = Path(__file__).parent / ("logo.jpg" if "Nature" in mode else "Torah.jfif")
-if logo_path.exists():
-    st.image(str(logo_path), width=120)
-
-# --- Themed Header ---
-if "Nature" in mode:
-    st.markdown(
-        "<div style='text-align:center;background-color:#1e1e1e;padding:15px;border-radius:10px;'>"
-        "<h1 style='color:#91d18b;'>🌿 Nature’s Pleasure Bot</h1>"
-        "<p style='color:#bbbbbb;'>Ask about herbs, teas, or holistic healing.</p>"
-        "</div>",
-        unsafe_allow_html=True
-    )
-else:
-    st.markdown(
-        "<h1 style='text-align: center; color: #3b3b3b;'>🕎 Torah SmartBot</h1>"
-        "<p style='text-align: center;'>Ask about scripture, Hebrew context, or Torah study.</p>",
-        unsafe_allow_html=True
-    )
-
-# --- RSS Refresh Button for Nature Mode ---
-if "Nature" in mode:
-    if st.button("🔄 Refresh Herbal Feeds"):
-        with st.spinner("Fetching latest herbal knowledge..."):
-            articles = fetch_rss_to_jsonl()
-            st.success(f"✅ {len(articles)} herbal articles parsed and saved.")
-
-# --- Chat History State ---
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-# --- Search Function ---
+# --- SEARCH FUNCTION ---
 def search_documents(query, top_k=3):
+    st.info(f"🔍 Searching for: '{query}' in Azure Cognitive Search")
     try:
         client_search = SearchClient(
             endpoint=SEARCH_ENDPOINT,
             index_name=SEARCH_INDEX,
-            credential=AzureKeyCredential(AZURE_SEARCH_KEY)
+            credential=AzureKeyCredential(SEARCH_API_KEY)
         )
         results = client_search.search(search_text=query, top=top_k)
         contents = []
@@ -98,16 +48,20 @@ def search_documents(query, top_k=3):
                     text = raw_content
             else:
                 text = str(raw_content)
+
+            st.write("📄 Document snippet:", text[:100])
             contents.append(text)
 
+        st.success(f"✅ Retrieved {len(contents)} document(s) from index.")
         return contents
+
     except Exception as e:
         st.error(f"❌ Search failed: {e}")
         return []
 
-# --- GPT Call ---
-def ask_smartbot(question, context):
-    prompt = f"""Use only the context below to answer the question.
+# --- GPT CALL ---
+def ask_smartbot(question, context, username):
+    prompt = f"""Use only the context below to answer the question. Personalize the response for {username}.
 
 Context:
 {context}
@@ -127,23 +81,60 @@ Answer:
         st.error(f"❌ GPT call failed: {e}")
         return "Sorry, I couldn't process your request right now."
 
-# --- Chat Input UI ---
-for msg in st.session_state.chat_history:
-    st.chat_message(msg["role"]).write(msg["content"])
+# --- STREAMLIT UI SETUP ---
+st.set_page_config(
+    page_title="METATRACES-AI",
+    page_icon="🤖",
+    layout="centered"
+)
 
-user_input = st.chat_input("💬 Ask something...")
+# --- User Login ---
+username = st.text_input("👤 Enter your name to personalize your session:")
+if not username:
+    st.stop()
 
+# --- Mode Switcher ---
+mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
+
+# --- Load Correct Logo ---
+logo_path = Path(__file__).parent / ("logo.jpg" if "Nature" in mode else "Torah.jfif")
+if logo_path.exists():
+    st.image(str(logo_path), width=120)
+
+# --- Themed Header ---
+if "Nature" in mode:
+    st.markdown(
+        f"<div style='text-align:center;background-color:#1e1e1e;padding:15px;border-radius:10px;'>"
+        f"<h1 style='color:#91d18b;'>🌿 Nature’s Pleasure Bot</h1>"
+        f"<p style='color:#bbbbbb;'>Welcome, {username}! Ask about herbs, teas, or holistic healing.</p>"
+        f"</div>",
+        unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        f"<h1 style='text-align: center; color: #3b3b3b;'>🕎 Torah SmartBot</h1>"
+        f"<p style='text-align: center;'>Welcome, {username}! Ask about scripture, history, or Hebrew context.</p>",
+        unsafe_allow_html=True
+    )
+
+# --- RSS Refresh (Only for Nature) ---
+if "Nature" in mode:
+    if st.button("🔄 Refresh Herbal Feeds"):
+        with st.spinner("Fetching latest herbal knowledge..."):
+            articles = fetch_rss_to_jsonl()
+            st.success(f"✅ {len(articles)} herbal articles parsed and saved.")
+
+# --- Chat UI ---
+user_input = st.text_input("💬 Ask me anything:")
 if user_input:
-    st.chat_message("user").write(user_input)
-    st.session_state.chat_history.append({"role": "user", "content": user_input})
-
+    st.session_state["last_question"] = user_input
     with st.spinner("Thinking..."):
         context_blocks = search_documents(user_input, top_k=3)
         if not context_blocks:
-            answer = "⚠️ I couldn't find relevant documents to answer that."
+            st.warning("⚠️ No relevant data found in search index.")
         else:
-            safe_context = "\n\n".join(context_blocks[:3])[:10000]
-            answer = ask_smartbot(user_input, safe_context)
-
-    st.chat_message("assistant").write(answer)
-    st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            joined_context = "\n\n".join(context_blocks)
+            safe_context = joined_context[:10000]
+            answer = ask_smartbot(user_input, safe_context, username)
+            st.markdown("### 🤖 SmartBot says:")
+            st.write(answer)
