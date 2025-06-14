@@ -1,179 +1,151 @@
 
 import os
 import json
-import requests
 import streamlit as st
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+from firebase_admin import auth, credentials, initialize_app
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
+from azure.storage.blob import BlobServiceClient
 from rss_parser import fetch_rss_to_jsonl
+from datetime import datetime
 
-# --- Load environment variables ---
+# --- Load Environment Variables ---
 load_dotenv()
-
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
-
-SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
+DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME", "SmartBotX")
+SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE", "smartbot-cheapsearch")
 SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
-PLANT_ID_API_KEY = os.getenv("PLANT_ID")
+SEARCH_INDEX_NATURE = "smartbot-index"
+SEARCH_INDEX_TORAH = "torah-index"
+SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_STORAGE_CONTAINER_NAME = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "userdata")
 
+# --- Firebase Init ---
+if not hasattr(st.session_state, "firebase_initialized"):
+    cred_path = Path("firebase_admin.json")
+    if cred_path.exists():
+        cred = credentials.Certificate(str(cred_path))
+        initialize_app(cred)
+        st.session_state.firebase_initialized = True
+    else:
+        st.error("Firebase Admin SDK JSON not found.")
+        st.stop()
+
+# --- Azure OpenAI Client ---
 client = AzureOpenAI(
     api_key=AZURE_OPENAI_KEY,
     api_version="2023-05-15",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
 
-herbs = [
-    "mint", "chamomile", "ginger", "turmeric", "lemon balm", "peppermint",
-    "rosemary", "lavender", "echinacea", "dandelion", "fennel", "hibiscus",
-    "licorice", "lemongrass", "nettle", "sage", "thyme", "valerian"
-]
-
-def detect_herb(text):
-    for herb in herbs:
-        if herb.lower() in text.lower():
-            return herb
-    return None
-
-def fetch_herb_image(herb_name):
-    if not PEXELS_API_KEY:
-        st.warning("⚠️ Missing PEXELS_API_KEY environment variable.")
-        return None
-    headers = {"Authorization": PEXELS_API_KEY}
-    params = {"query": f"{herb_name} herb", "per_page": 1}
+# --- Azure Blob Logging Function ---
+def log_user_to_blob(user_data):
     try:
-        response = requests.get("https://api.pexels.com/v1/search", headers=headers, params=params)
-        data = response.json()
-        if data["photos"]:
-            return data["photos"][0]["src"]["medium"]
-        return None
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+        container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
+
+        try:
+            container_client.create_container()
+        except:
+            pass
+
+        log_blob_name = "user_log.txt"
+        timestamp = datetime.utcnow().isoformat()
+        new_entry = f"{timestamp} | {user_data['name']} | {user_data['email']} | {user_data['uid']}\n"
+
+        try:
+            existing_blob = container_client.get_blob_client(log_blob_name)
+            current_data = existing_blob.download_blob().readall().decode()
+        except:
+            current_data = ""
+
+        updated_data = current_data + new_entry
+        container_client.upload_blob(name=log_blob_name, data=updated_data, overwrite=True)
     except Exception as e:
-        st.warning(f"Image fetch error: {e}")
-        return None
+        st.error(f"⚠️ Failed to log user to Azure Blob: {e}")
 
-def ask_smartbot(question, context, username):
-    prompt = f"""Use only the context below to answer the question. Personalize the response for {username}.
-
-Context:
-{context}
-
-Question: {question}
-Answer:
-"""
+# --- Token Verification via URL param ---
+query_params = st.experimental_get_query_params()
+if "token" in query_params:
     try:
-        response = client.chat.completions.create(
-            model=DEPLOYMENT_NAME,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=400
-        )
-        return response.choices[0].message.content
+        decoded = auth.verify_id_token(query_params["token"][0])
+        st.session_state.user = {
+            "name": decoded.get("name", "Guest"),
+            "email": decoded.get("email"),
+            "uid": decoded.get("uid")
+        }
+        log_user_to_blob(st.session_state.user)
     except Exception as e:
-        st.error(f"❌ GPT call failed: {e}")
-        return "Sorry, I couldn't process your request right now."
+        st.error(f"Token verification failed: {e}")
+        st.stop()
 
-def search_documents(query, top_k=3):
-    try:
-        client_search = SearchClient(
-            endpoint=f"https://{SEARCH_SERVICE}.search.windows.net",
-            index_name="torah-index" if "Torah" in st.session_state.mode else "smartbot-index",
-            credential=AzureKeyCredential(SEARCH_API_KEY)
-        )
-        results = client_search.search(search_text=query, top=top_k)
-        return [r.get("content", "") or r.get("text", "") or str(r) for r in results]
-    except Exception as e:
-        st.error(f"❌ Search error: {e}")
-        return []
-
-# --- Streamlit setup ---
-st.set_page_config(page_title="METATRACES-AI", page_icon="🤖", layout="centered")
-
-username = st.text_input("🧑 Your name (nickname or first name is fine):")
-if not username:
-    st.warning("Please enter your name to continue.")
+if "user" not in st.session_state:
+    st.warning("🔒 Please sign in via Google: [Login Here](login.html)", icon="🔑")
     st.stop()
+
+username = st.session_state.user["name"]
+
+# --- Page Setup ---
+st.set_page_config(page_title="METATRACES-AI", page_icon="🤖", layout="centered")
+mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
+SEARCH_INDEX = SEARCH_INDEX_NATURE if "Nature" in mode else SEARCH_INDEX_TORAH
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-st.session_state.mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
-
-logo_path = Path(__file__).parent / ("logo.jpg" if "Nature" in st.session_state.mode else "Torah.jfif")
-if logo_path.exists():
-    st.image(str(logo_path), width=120)
-
-if "Nature" in st.session_state.mode:
-    st.markdown(
-        f"<div style='text-align:center;background-color:#1e1e1e;padding:15px;border-radius:10px;'>"
-        f"<h1 style='color:#91d18b;'>🌿 Nature’s Pleasure Bot</h1>"
-        f"<p style='color:#bbbbbb;'>Welcome, {username}! Ask about herbs, teas, or holistic healing.</p>"
-        f"</div>",
-        unsafe_allow_html=True
+def search_documents(query, top_k=3):
+    client_search = SearchClient(
+        endpoint=SEARCH_ENDPOINT,
+        index_name=SEARCH_INDEX,
+        credential=AzureKeyCredential(SEARCH_API_KEY)
     )
+    results = client_search.search(search_text=query, top=top_k)
+    contents = [r.get("content", "") or r.get("text", "") or str(r) for r in results]
+    return contents
+
+def ask_smartbot(question, context):
+    prompt = f"""Use only the context below to answer the question.
+
+Previous Q&A:
+{context}
+
+Current Question:
+{question}
+Answer:""" 
+    response = client.chat.completions.create(
+        model=DEPLOYMENT_NAME,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+        max_tokens=400
+    )
+    return response.choices[0].message.content
+
+# --- UI Header ---
+if "Nature" in mode:
+    st.title("🌿 Nature’s Pleasure Bot")
 else:
-    st.markdown(
-        f"<h1 style='text-align: center; color: #3b3b3b;'>🕎 Torah SmartBot</h1>"
-        f"<p style='text-align: center;'>Welcome, {username}! Ask about scripture, history, or Hebrew context.</p>",
-        unsafe_allow_html=True
-    )
+    st.title("🕎 Torah SmartBot")
 
-if "Nature" in st.session_state.mode:
-    if st.button("🔄 Refresh Herbal Feeds"):
-        with st.spinner("Fetching latest herbal knowledge..."):
-            articles = fetch_rss_to_jsonl()
-            st.write("📦 Parsed Articles:", articles[:3])
-            st.success(f"✅ {len(articles)} herbal articles parsed.")
-
-    uploaded_file = st.file_uploader("📷 Upload a photo of a herb or fruit", type=["jpg", "jpeg", "png"])
-    if uploaded_file:
-        with st.spinner("Identifying plant..."):
-            response = requests.post(
-                "https://api.plant.id/v2/identify",
-                headers={"Api-Key": PLANT_ID_API_KEY},
-                files={"images": (uploaded_file.name, uploaded_file, uploaded_file.type)},
-                data={"organs": "leaf"}
-            )
-            result = response.json()
-            if "suggestions" in result and result["suggestions"]:
-                plant_name = result["suggestions"][0]["plant_name"]
-                st.success(f"🌿 Identified as: **{plant_name}**")
-
-                context_blocks = search_documents(plant_name, top_k=3)
-                if context_blocks:
-                    safe_context = "\n\n".join(context_blocks)[:10000]
-                    answer = ask_smartbot(f"What are the benefits or uses of {plant_name}?", safe_context, username)
-                    st.markdown("### 🤖 SmartBot says:")
-                    st.write(answer)
-                else:
-                    st.warning("No info found in herbal index.")
-            else:
-                st.warning("❌ Couldn't identify the plant.")
-
+# --- Input & Response ---
 user_input = st.chat_input("Ask me anything...")
+
 if user_input:
     st.session_state.chat_history.append({"role": "user", "content": user_input})
-    with st.spinner("Thinking..."):
-        context_blocks = search_documents(user_input, top_k=3)
-        if not context_blocks:
-            bot_reply = "⚠️ No relevant data found in search index."
-        else:
-            safe_context = "\n\n".join(context_blocks)[:10000]
-            bot_reply = ask_smartbot(user_input, safe_context, username)
-    st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
 
-for msg in st.session_state.chat_history:
-    if msg["role"] == "user":
-        st.chat_message("user").markdown(msg["content"])
-    else:
-        st.chat_message("assistant").markdown(msg["content"])
-        if "Nature" in st.session_state.mode:
-            herb_detected = detect_herb(st.session_state.chat_history[-2]["content"])
-            if herb_detected:
-                image_url = fetch_herb_image(herb_detected)
-                if image_url:
-                    st.image(image_url, caption=f"{herb_detected.title()} Herb", use_container_width=True)
+    context_blocks = search_documents(user_input, top_k=3)
+    recent_history = [item["content"] for item in st.session_state.chat_history[-5:] if item["role"] == "user"]
+    context = "\n\n".join(recent_history + context_blocks)[:10000]
+
+    reply = ask_smartbot(user_input, context)
+    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+
+# --- Display Chat ---
+for entry in st.session_state.chat_history:
+    with st.chat_message(entry["role"]):
+        st.markdown(entry["content"])
