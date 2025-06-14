@@ -7,3 +7,4 @@ feedparser
 html2text
 beautifulsoup4
 firebase-admin
+azure-storage-blob
