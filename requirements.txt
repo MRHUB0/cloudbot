@@ -8,3 +8,5 @@ html2text
 beautifulsoup4
 firebase-admin
 azure-storage-blob
+stripe                    # Required if you're adding paid subscriptions
+requests                  # Used for any HTTP calls (e.g. Pexels API for image)
