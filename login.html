@@ -1,0 +1,42 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Login with Google - Nature's Pleasure</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB2H8aiNo6WKKYIWCj2fCmrYlYjC-JtRmI",
+      authDomain: "naturespleasuress.firebaseapp.com",
+      projectId: "naturespleasuress",
+      storageBucket: "naturespleasuress.firebasestorage.app",
+      messagingSenderId: "507085432359",
+      appId: "1:507085432359:web:1cb9ae723efdd2fb035002"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const provider = new GoogleAuthProvider();
+    const auth = getAuth();
+
+    window.loginWithGoogle = function () {
+      signInWithPopup(auth, provider)
+        .then((result) => {
+          const token = result._tokenResponse.idToken;
+          window.location.href = "http://localhost:8501/?token=" + token;
+        })
+        .catch((error) => {
+          alert("Login failed: " + error.message);
+        });
+    };
+  </script>
+</head>
+<body style="text-align: center; margin-top: 100px; font-family: Arial;">
+  <h2>🌿 Welcome to Nature's Pleasure</h2>
+  <p>Sign in with Google to continue</p>
+  <button onclick="loginWithGoogle()" style="padding: 12px 24px; font-size: 16px; cursor: pointer;">
+    Sign in with Google
+  </button>
+</body>
+</html>
