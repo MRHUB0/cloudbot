@@ -1,148 +1,155 @@
-
 import os
 import json
 import streamlit as st
-from datetime import datetime
-from dotenv import load_dotenv
+from pathlib import Path
 from openai import AzureOpenAI
-from firebase_admin import auth, credentials, initialize_app
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
-from azure.storage.blob import BlobServiceClient
 from rss_parser import fetch_rss_to_jsonl
+from firebase_admin import auth, credentials, initialize_app
+from azure.storage.blob import BlobServiceClient
 
-# --- Load Environment Variables ---
-load_dotenv()
-
-# --- Azure & Firebase Config ---
+# --- CONFIG ---
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME", "SmartBotX")
-SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE", "")
+DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
+SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
+SEARCH_INDEX = os.getenv("AZURE_SEARCH_INDEX")
 SEARCH_API_KEY = os.getenv("AZURE_SEARCH_KEY")
-SEARCH_INDEX_NATURE = "smartbot-index"
-SEARCH_INDEX_TORAH = "torah-index"
 SEARCH_ENDPOINT = f"https://{SEARCH_SERVICE}.search.windows.net"
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
+FIREBASE_JSON = os.getenv("FIREBASE_ADMIN_JSON")
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_STORAGE_CONTAINER_NAME = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "userdata")
 
-# --- Firebase from ENV ---
-firebase_json_str = os.getenv("FIREBASE_ADMIN_JSON")
-if firebase_json_str:
-    try:
-        cred = credentials.Certificate(json.loads(firebase_json_str))
-        initialize_app(cred)
-        st.session_state.firebase_initialized = True
-    except Exception as e:
-        st.error(f"❌ Failed to initialize Firebase: {e}")
-        st.stop()
-else:
+# --- FIREBASE INIT ---
+if not FIREBASE_JSON:
     st.error("❌ Firebase config missing from environment.")
     st.stop()
 
-# --- Azure OpenAI Client ---
+try:
+    cred = credentials.Certificate(json.loads(FIREBASE_JSON.replace("\\n", "\n")))
+    initialize_app(cred)
+except Exception as e:
+    st.error(f"❌ Failed to initialize Firebase: {e}")
+    st.stop()
+
+# --- AZURE OPENAI CLIENT ---
 client = AzureOpenAI(
     api_key=AZURE_OPENAI_KEY,
     api_version="2023-05-15",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
 
-# --- User Logging ---
-def log_user_to_blob(user_data):
-    try:
-        blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
-        container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
-        try:
-            container_client.create_container()
-        except:
-            pass
-        log_blob_name = "user_log.txt"
-        timestamp = datetime.utcnow().isoformat()
-        new_entry = f"{timestamp} | {user_data['name']} | {user_data['email']} | {user_data['uid']}\n"
-        try:
-            existing_blob = container_client.get_blob_client(log_blob_name)
-            current_data = existing_blob.download_blob().readall().decode()
-        except:
-            current_data = ""
-        updated_data = current_data + new_entry
-        container_client.upload_blob(name=log_blob_name, data=updated_data, overwrite=True)
-    except Exception as e:
-        st.error(f"⚠️ Failed to log user: {e}")
+# --- BLOB STORAGE CLIENT ---
+blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+container_client = blob_service_client.get_container_client(AZURE_STORAGE_CONTAINER_NAME)
 
-# --- Token Verification ---
-query_params = st.experimental_get_query_params()
-if "token" in query_params:
+# --- SEARCH FUNCTION ---
+def search_documents(query, top_k=3):
+    st.info(f"🔍 Searching for: '{query}' in Azure Cognitive Search")
     try:
-        decoded = auth.verify_id_token(query_params["token"][0])
-        st.session_state.user = {
-            "name": decoded.get("name", "Guest"),
-            "email": decoded.get("email"),
-            "uid": decoded.get("uid")
-        }
-        log_user_to_blob(st.session_state.user)
+        client_search = SearchClient(
+            endpoint=SEARCH_ENDPOINT,
+            index_name=SEARCH_INDEX,
+            credential=AzureKeyCredential(SEARCH_API_KEY)
+        )
+        results = client_search.search(search_text=query, top=top_k)
+        contents = []
+        for r in results:
+            raw_content = r.get("content", "") or r.get("text", "") or str(r)
+            try:
+                maybe_dict = json.loads(raw_content)
+                text = maybe_dict.get("text", "") or maybe_dict.get("content", raw_content)
+            except:
+                text = raw_content
+            contents.append(text)
+        return contents
     except Exception as e:
-        st.error(f"Token error: {e}")
-        st.stop()
+        st.error(f"❌ Search failed: {e}")
+        return []
 
-if "user" not in st.session_state:
-    st.warning("🔐 Please sign in via Google.", icon="🔑")
+# --- GPT CALL ---
+def ask_smartbot(question, context, username):
+    prompt = f"""Use only the context below to answer the question.
+
+Context:
+{context}
+
+Question: {question}
+Answer:
+"""
+    try:
+        response = client.chat.completions.create(
+            model=DEPLOYMENT_NAME,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=400
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"❌ GPT call failed: {e}")
+        return "Sorry, I couldn't process your request right now."
+
+# --- SAVE TO BLOB STORAGE ---
+def save_user_log(username, question):
+    try:
+        blob_client = container_client.get_blob_client(f"{username}.txt")
+        if blob_client.exists():
+            old = blob_client.download_blob().readall().decode()
+            new = old + f"\n{question}"
+        else:
+            new = question
+        blob_client.upload_blob(new, overwrite=True)
+    except Exception as e:
+        st.warning(f"⚠️ Could not save user log: {e}")
+
+# --- STREAMLIT UI SETUP ---
+st.set_page_config(page_title="Nature’s Pleasure Bot", page_icon="🌿")
+
+# --- Load Google Sign-In token ---
+token = st.query_params.get("token")
+if not token:
+    st.warning("🔒 Please log in first.")
     st.stop()
 
-username = st.session_state.user["name"]
+try:
+    decoded_token = auth.verify_id_token(token)
+    username = decoded_token.get("name") or decoded_token.get("email") or "guest"
+except Exception as e:
+    st.error(f"❌ Invalid login: {e}")
+    st.stop()
 
-# --- Streamlit Setup ---
-st.set_page_config(page_title="METATRACES-AI", page_icon="🤖", layout="centered")
-mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
-SEARCH_INDEX = SEARCH_INDEX_NATURE if "Nature" in mode else SEARCH_INDEX_TORAH
+st.success(f"✅ Welcome, {username}")
 
+# --- UI Header ---
+st.markdown("<h1 style='text-align:center;'>🌿 Nature’s Pleasure Herbal SmartBot</h1>", unsafe_allow_html=True)
+
+# --- Refresh RSS ---
+if st.button("🔄 Refresh Herbal Feeds"):
+    with st.spinner("Fetching RSS feeds..."):
+        articles = fetch_rss_to_jsonl()
+        st.success(f"✅ {len(articles)} articles saved.")
+
+# --- Chat Input ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# --- Search Function ---
-def search_documents(query, top_k=3):
-    client_search = SearchClient(
-        endpoint=SEARCH_ENDPOINT,
-        index_name=SEARCH_INDEX,
-        credential=AzureKeyCredential(SEARCH_API_KEY)
-    )
-    results = client_search.search(search_text=query, top=top_k)
-    return [r.get("content", "") or r.get("text", "") or str(r) for r in results]
+user_input = st.chat_input("Ask me anything about herbs or tea...")
 
-# --- GPT Completion ---
-def ask_smartbot(question, context):
-    prompt = f"""Use only the context below to answer the question.
-
-Previous Q&A:
-{context}
-
-Current Question:
-{question}
-Answer:""" 
-    response = client.chat.completions.create(
-        model=DEPLOYMENT_NAME,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=400
-    )
-    return response.choices[0].message.content
-
-# --- Bot UI ---
-if "Nature" in mode:
-    st.title("🌿 Nature’s Pleasure Bot")
-else:
-    st.title("🕎 Torah SmartBot")
-
-# --- Chat ---
-user_input = st.chat_input("Ask me anything...")
 if user_input:
     st.session_state.chat_history.append({"role": "user", "content": user_input})
-    context_blocks = search_documents(user_input, top_k=3)
-    recent_qs = [item["content"] for item in st.session_state.chat_history[-5:] if item["role"] == "user"]
-    context = "\n\n".join(recent_qs + context_blocks)[:10000]
-    reply = ask_smartbot(user_input, context)
-    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+    with st.spinner("Thinking..."):
+        context_blocks = search_documents(user_input, top_k=3)
+        if not context_blocks:
+            bot_reply = "⚠️ No relevant data found in search index."
+        else:
+            safe_context = "\n\n".join(context_blocks)[:10000]
+            bot_reply = ask_smartbot(user_input, safe_context, username)
+    st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
+    save_user_log(username, user_input)
 
-# --- Chat History Display ---
-for entry in st.session_state.chat_history:
-    with st.chat_message(entry["role"]):
-        st.markdown(entry["content"])
+# --- Display Chat ---
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
