@@ -11,7 +11,7 @@ from azure.search.documents import SearchClient
 from azure.storage.blob import BlobServiceClient
 from rss_parser import fetch_rss_to_jsonl
 
-# --- Load .env ---
+# --- Load Environment Variables ---
 load_dotenv()
 
 # --- Azure & Firebase Config ---
@@ -29,9 +29,13 @@ AZURE_STORAGE_CONTAINER_NAME = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "userda
 # --- Firebase from ENV ---
 firebase_json_str = os.getenv("FIREBASE_ADMIN_JSON")
 if firebase_json_str:
-    cred = credentials.Certificate(json.loads(firebase_json_str))
-    initialize_app(cred)
-    st.session_state.firebase_initialized = True
+    try:
+        cred = credentials.Certificate(json.loads(firebase_json_str))
+        initialize_app(cred)
+        st.session_state.firebase_initialized = True
+    except Exception as e:
+        st.error(f"❌ Failed to initialize Firebase: {e}")
+        st.stop()
 else:
     st.error("❌ Firebase config missing from environment.")
     st.stop()
@@ -43,7 +47,7 @@ client = AzureOpenAI(
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
 
-# --- Log User to Azure Blob ---
+# --- User Logging ---
 def log_user_to_blob(user_data):
     try:
         blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
@@ -65,7 +69,7 @@ def log_user_to_blob(user_data):
     except Exception as e:
         st.error(f"⚠️ Failed to log user: {e}")
 
-# --- Verify Firebase Token from login.html ---
+# --- Token Verification ---
 query_params = st.experimental_get_query_params()
 if "token" in query_params:
     try:
@@ -86,7 +90,7 @@ if "user" not in st.session_state:
 
 username = st.session_state.user["name"]
 
-# --- Streamlit UI Setup ---
+# --- Streamlit Setup ---
 st.set_page_config(page_title="METATRACES-AI", page_icon="🤖", layout="centered")
 mode = st.radio("Choose Bot Mode", ["Nature’s Pleasure 🌿", "Torah 🕎"], horizontal=True)
 SEARCH_INDEX = SEARCH_INDEX_NATURE if "Nature" in mode else SEARCH_INDEX_TORAH
@@ -94,7 +98,7 @@ SEARCH_INDEX = SEARCH_INDEX_NATURE if "Nature" in mode else SEARCH_INDEX_TORAH
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# --- Search ---
+# --- Search Function ---
 def search_documents(query, top_k=3):
     client_search = SearchClient(
         endpoint=SEARCH_ENDPOINT,
@@ -104,7 +108,7 @@ def search_documents(query, top_k=3):
     results = client_search.search(search_text=query, top=top_k)
     return [r.get("content", "") or r.get("text", "") or str(r) for r in results]
 
-# --- Generate Answer ---
+# --- GPT Completion ---
 def ask_smartbot(question, context):
     prompt = f"""Use only the context below to answer the question.
 
@@ -122,19 +126,19 @@ Answer:"""
     )
     return response.choices[0].message.content
 
-# --- Bot Header ---
+# --- Bot UI ---
 if "Nature" in mode:
     st.title("🌿 Nature’s Pleasure Bot")
 else:
     st.title("🕎 Torah SmartBot")
 
-# --- Chat Input ---
+# --- Chat ---
 user_input = st.chat_input("Ask me anything...")
 if user_input:
     st.session_state.chat_history.append({"role": "user", "content": user_input})
     context_blocks = search_documents(user_input, top_k=3)
-    recent_history = [item["content"] for item in st.session_state.chat_history[-5:] if item["role"] == "user"]
-    context = "\n\n".join(recent_history + context_blocks)[:10000]
+    recent_qs = [item["content"] for item in st.session_state.chat_history[-5:] if item["role"] == "user"]
+    context = "\n\n".join(recent_qs + context_blocks)[:10000]
     reply = ask_smartbot(user_input, context)
     st.session_state.chat_history.append({"role": "assistant", "content": reply})
 
