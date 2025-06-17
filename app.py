@@ -33,7 +33,7 @@ st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Welcome! Ask about herbal remedies, upload an herb/fruit photo for ID, or explore RSS articles.")
 
 # --- Token Authentication ---
-query_params = st.query_params  # ✅ FIXED: no parentheses
+query_params = st.query_params
 token = query_params.get("token", [None])[0]
 
 user_email = None
@@ -43,10 +43,10 @@ if token:
         user_email = decoded_token.get("email")
         st.success(f"✅ Logged in as {user_email}")
     except Exception as e:
-        st.warning(f"⚠️ Invalid or expired token. Please [log in again](login.html).")
+        st.warning(f"⚠️ Invalid or expired token. Please [log in again](https://mrbot-cgemg2cmedfff5h6.eastus-01.azurewebsites.net/login.html).")
         st.stop()
 else:
-    st.warning("🔒 You are not logged in. Please [click here to log in](login.html).")
+    st.warning("🔒 You are not logged in. Please [click here to log in](https://mrbot-cgemg2cmedfff5h6.eastus-01.azurewebsites.net/login.html).")
     st.stop()
 
 # --- Chat Input ---
