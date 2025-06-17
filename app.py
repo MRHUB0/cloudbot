@@ -27,12 +27,12 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 
-# --- Page config ---
+# --- Page Configuration ---
 st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿")
 st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Welcome! Ask about herbal remedies, upload an herb/fruit photo for ID, or explore RSS articles.")
 
-# --- Token Authentication ---
+# --- Token-based Authentication ---
 query_params = st.experimental_get_query_params()
 token = query_params.get("token", [None])[0]
 
@@ -45,13 +45,14 @@ if token:
     except Exception as e:
         st.warning(f"⚠️ Invalid or expired token: {e}")
 else:
-    st.warning("🔒 Not logged in. Please [sign in](login.html).")
+    st.warning("🔒 You are not logged in. [Click here to login](login.html)")
+    st.stop()  # Prevent the app from continuing without login
 
 # --- Chat Input Logic ---
-user_input = st.chat_input("Ask me anything...")
+user_input = st.chat_input("Ask me anything about herbs, teas, or healing...")
 if user_input:
     st.write(f"🧠 You asked: {user_input}")
-    
+
     if AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY and DEPLOYMENT_NAME:
         client = AzureOpenAI(
             api_key=AZURE_OPENAI_API_KEY,
@@ -66,32 +67,34 @@ if user_input:
             reply = response.choices[0].message.content
             st.success(reply)
         except Exception as e:
-            st.error(f"🛑 OpenAI API Error: {e}")
+            st.error(f"🛑 Error calling Azure OpenAI: {e}")
     else:
-        st.error("Missing Azure OpenAI config in environment variables.")
+        st.error("Missing Azure OpenAI configuration in environment.")
 
-# --- Upload image for plant ID ---
+# --- Herb/Fruit Image Upload for Plant ID ---
 uploaded_file = st.file_uploader("Upload an herb or fruit photo for identification", type=["jpg", "png", "jpeg"])
 if uploaded_file:
     st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
-    st.info("🔍 Processing image with Plant ID API...")
+    st.info("🔍 Identifying plant...")
 
     plant_id_key = os.getenv("PLANT_ID")
     if not plant_id_key:
-        st.error("Plant ID API key is missing.")
+        st.error("❌ Plant ID API key is missing.")
     else:
         files = {"images": uploaded_file.getvalue()}
         headers = {"Api-Key": plant_id_key}
-        res = requests.post("https://api.plant.id/v2/identify", headers=headers, files=files)
-
-        if res.status_code == 200:
-            result = res.json()
-            if result.get("suggestions"):
-                suggestion = result["suggestions"][0]
-                name = suggestion.get("plant_name", "Unknown")
-                sci = suggestion.get("plant_details", {}).get("scientific_name", "Unknown")
-                st.success(f"🌱 Identified as: {name} ({sci})")
+        try:
+            res = requests.post("https://api.plant.id/v2/identify", headers=headers, files=files)
+            if res.status_code == 200:
+                result = res.json()
+                if result.get("suggestions"):
+                    suggestion = result["suggestions"][0]
+                    name = suggestion.get("plant_name", "Unknown")
+                    sci = suggestion.get("plant_details", {}).get("scientific_name", "Unknown")
+                    st.success(f"🌱 Identified as: {name} ({sci})")
+                else:
+                    st.warning("Couldn't confidently identify the plant.")
             else:
-                st.warning("Couldn't confidently identify the plant.")
-        else:
-            st.error("Failed to query Plant ID API.")
+                st.error(f"❌ Plant ID API call failed: {res.status_code}")
+        except Exception as e:
+            st.error(f"❌ Error during plant identification: {e}")
