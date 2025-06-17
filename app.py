@@ -43,10 +43,10 @@ if token:
         user_email = decoded_token.get("email")
         st.success(f"✅ Logged in as {user_email}")
     except Exception as e:
-        st.warning(f"⚠️ Invalid or expired token. Please [log in again](https://mrbot-cgemg2cmedfff5h6.eastus-01.azurewebsites.net/login.html).")
+        st.warning("⚠️ Invalid or expired token. Please [log in again](https://naturespleasuress.web.app).")
         st.stop()
 else:
-    st.warning("🔒 You are not logged in. Please [click here to log in](https://mrbot-cgemg2cmedfff5h6.eastus-01.azurewebsites.net/login.html).")
+    st.warning("🔒 You are not logged in. Please [click here to log in](https://naturespleasuress.web.app).")
     st.stop()
 
 # --- Chat Input ---
