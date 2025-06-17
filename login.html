@@ -20,16 +20,18 @@
     const auth = getAuth();
 
     window.loginWithGoogle = function () {
-      console.log("🟡 Initiating Google login...");
+      console.log("🟢 Login button clicked");
       signInWithPopup(auth, provider)
         .then((result) => {
           const token = result._tokenResponse.idToken;
-          console.log("✅ Got ID token:", token);
-          window.location.href = window.location.origin + "/?token=" + token;
+          console.log("✅ Received Firebase ID token:", token);
+          const redirectUrl = window.location.origin + "/?token=" + token;
+          console.log("🔁 Redirecting to:", redirectUrl);
+          window.location.href = redirectUrl;
         })
         .catch((error) => {
           console.error("❌ Login failed:", error);
-          alert("Google login failed. Check browser popup settings.");
+          alert("Google login failed. Be sure pop-ups are allowed.");
         });
     };
   </script>
