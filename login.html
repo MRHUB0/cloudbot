@@ -20,13 +20,16 @@
     const auth = getAuth();
 
     window.loginWithGoogle = function () {
+      console.log("🟡 Initiating Google login...");
       signInWithPopup(auth, provider)
         .then((result) => {
           const token = result._tokenResponse.idToken;
+          console.log("✅ Got ID token:", token);
           window.location.href = window.location.origin + "/?token=" + token;
         })
         .catch((error) => {
-          alert("Login failed: " + error.message);
+          console.error("❌ Login failed:", error);
+          alert("Google login failed. Check browser popup settings.");
         });
     };
   </script>
