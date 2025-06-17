@@ -32,8 +32,8 @@ st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿")
 st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Welcome! Ask about herbal remedies, upload an herb/fruit photo for ID, or explore RSS articles.")
 
-# --- Token-based Authentication ---
-query_params = st.experimental_get_query_params()
+# --- Token Authentication ---
+query_params = st.query_params()
 token = query_params.get("token", [None])[0]
 
 user_email = None
@@ -43,12 +43,13 @@ if token:
         user_email = decoded_token.get("email")
         st.success(f"✅ Logged in as {user_email}")
     except Exception as e:
-        st.warning(f"⚠️ Invalid or expired token: {e}")
+        st.warning(f"⚠️ Invalid or expired token. Please [log in again](login.html).")
+        st.stop()
 else:
-    st.warning("🔒 You are not logged in. [Click here to login](login.html)")
-    st.stop()  # Prevent the app from continuing without login
+    st.warning("🔒 You are not logged in. Please [click here to log in](login.html).")
+    st.stop()
 
-# --- Chat Input Logic ---
+# --- Chat Input ---
 user_input = st.chat_input("Ask me anything about herbs, teas, or healing...")
 if user_input:
     st.write(f"🧠 You asked: {user_input}")
@@ -67,11 +68,11 @@ if user_input:
             reply = response.choices[0].message.content
             st.success(reply)
         except Exception as e:
-            st.error(f"🛑 Error calling Azure OpenAI: {e}")
+            st.error(f"🛑 OpenAI API Error: {e}")
     else:
-        st.error("Missing Azure OpenAI configuration in environment.")
+        st.error("Missing Azure OpenAI configuration.")
 
-# --- Herb/Fruit Image Upload for Plant ID ---
+# --- Image Upload for Plant ID ---
 uploaded_file = st.file_uploader("Upload an herb or fruit photo for identification", type=["jpg", "png", "jpeg"])
 if uploaded_file:
     st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
