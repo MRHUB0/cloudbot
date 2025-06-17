@@ -33,7 +33,7 @@ st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Welcome! Ask about herbal remedies, upload an herb/fruit photo for ID, or explore RSS articles.")
 
 # --- Token Authentication ---
-query_params = st.query_params()
+query_params = st.query_params  # ✅ FIXED: no parentheses
 token = query_params.get("token", [None])[0]
 
 user_email = None
