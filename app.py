@@ -1,13 +1,13 @@
 import streamlit as st
 import firebase_admin
-from firebase_admin import credentials
+from firebase_admin import credentials, auth
 import os
 import json
 import requests
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
-# Load environment variables
+# --- Load environment variables ---
 load_dotenv()
 
 # --- Firebase Initialization ---
@@ -27,10 +27,25 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 
-# --- Streamlit UI ---
+# --- Page config ---
 st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿")
 st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Welcome! Ask about herbal remedies, upload an herb/fruit photo for ID, or explore RSS articles.")
+
+# --- Token Authentication ---
+query_params = st.experimental_get_query_params()
+token = query_params.get("token", [None])[0]
+
+user_email = None
+if token:
+    try:
+        decoded_token = auth.verify_id_token(token)
+        user_email = decoded_token.get("email")
+        st.success(f"✅ Logged in as {user_email}")
+    except Exception as e:
+        st.warning(f"⚠️ Invalid or expired token: {e}")
+else:
+    st.warning("🔒 Not logged in. Please [sign in](login.html).")
 
 # --- Chat Input Logic ---
 user_input = st.chat_input("Ask me anything...")
