@@ -43,10 +43,10 @@ if token:
         user_email = decoded_token.get("email")
         st.success(f"✅ Logged in as {user_email}")
     except Exception as e:
-        st.warning("⚠️ Invalid or expired token. Please [log in again](https://naturespleasuress.web.app).")
+        st.warning("⚠️ Invalid or expired token. Please [log in again](https://naturespleasuress.web.app/login.html).")
         st.stop()
 else:
-    st.warning("🔒 You are not logged in. Please [click here to log in](https://naturespleasuress.web.app).")
+    st.warning("🔒 You are not logged in. Please [click here to log in](https://naturespleasuress.web.app/login.html).")
     st.stop()
 
 # --- Chat Input ---
