@@ -75,7 +75,7 @@ elif not st.session_state["guest"]:
 
     if st.button("👤 Continue as Guest"):
         st.session_state["guest"] = True
-        st.experimental_rerun()
+        st.rerun()  # ✅ Updated for Streamlit 1.30+
 
     st.stop()
 
