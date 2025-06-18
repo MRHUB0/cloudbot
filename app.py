@@ -34,6 +34,12 @@ st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿")
 st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Welcome! Ask about herbal remedies, upload an herb/fruit photo for ID, or explore RSS articles.")
 
+# --- Session defaults ---
+if "guest" not in st.session_state:
+    st.session_state["guest"] = False
+if "guest_question_count" not in st.session_state:
+    st.session_state["guest_question_count"] = 0
+
 # --- Token Authentication ---
 query_params = st.query_params
 token = query_params.get("token", [None])[0]
@@ -43,17 +49,17 @@ if token:
     try:
         decoded_token = auth.verify_id_token(token)
         user_email = decoded_token.get("email")
+        st.session_state["guest"] = False  # authenticated user
         st.success(f"✅ Logged in as {user_email}")
     except Exception as e:
         st.warning("⚠️ Invalid or expired token. Please sign in again.")
         st.stop()
-else:
+elif not st.session_state["guest"]:
     st.warning("🔒 You are not logged in.")
-    login_popup = """
+    login_block = """
     <script>
     function openLoginPopup() {
       const popup = window.open("https://naturespleasuress.web.app/login.html", "_blank", "width=500,height=600");
-
       window.addEventListener("message", function(event) {
         if (event.data.token) {
           const token = event.data.token;
@@ -63,14 +69,30 @@ else:
       }, false);
     }
     </script>
-    <button onclick="openLoginPopup()" style="padding: 10px 18px; font-size: 16px; cursor: pointer;">🔐 Sign in with Google</button>
+    <button onclick="openLoginPopup()" style="padding: 10px 16px; font-size: 16px;">🔐 Sign in with Google</button>
     """
-    components.html(login_popup, height=100)
+    components.html(login_block, height=100)
+
+    if st.button("👤 Continue as Guest"):
+        st.session_state["guest"] = True
+        st.experimental_rerun()
+
     st.stop()
+
+# --- Guest User Notice ---
+if st.session_state["guest"]:
+    st.info("You're using Guest Mode. You can ask up to 5 questions.")
+    st.caption(f"Guest questions used: {st.session_state['guest_question_count']} / 5")
 
 # --- Chat Input ---
 user_input = st.chat_input("Ask me anything about herbs, teas, or healing...")
 if user_input:
+    if st.session_state["guest"]:
+        st.session_state["guest_question_count"] += 1
+        if st.session_state["guest_question_count"] > 5:
+            st.error("❌ Guest limit reached. Please sign in with Google for unlimited access.")
+            st.stop()
+
     st.write(f"🧠 You asked: {user_input}")
 
     if AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY and DEPLOYMENT_NAME:
