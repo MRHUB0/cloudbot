@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
-# --- Environment Setup ---
+# --- Load environment variables ---
 load_dotenv()
 
 # --- Firebase Initialization ---
@@ -29,13 +29,15 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 
-# --- Page Styling ---
+# --- Streamlit Page Settings ---
 st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿", layout="centered")
 
+# --- Custom Styling for UI & Dark Mode ---
 st.markdown("""
     <style>
     .main {
-        background-color: #f4f8f3;
+        background-color: #121212;
+        color: #f5f5f5;
     }
     .stButton > button {
         background-color: #4caf50;
@@ -44,32 +46,31 @@ st.markdown("""
         padding: 10px 20px;
         font-weight: bold;
     }
-    .stChatInputContainer {
-        background-color: #fffaf0;
-        border-radius: 8px;
-    }
     .message-bubble {
-        border: 1px solid #ccc;
+        border: 1px solid #444;
         padding: 12px;
         border-radius: 12px;
-        background: #f1f8e9;
+        background-color: rgba(255, 255, 255, 0.05);
+        color: #ffffff;
         margin: 10px 0;
+        font-size: 1rem;
+        line-height: 1.5;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Header & Logo ---
+# --- Header ---
 st.image("logo.jpg", width=120)
 st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Welcome! Ask about herbal remedies, upload an herb/fruit photo for ID, or explore RSS articles.")
 
-# --- Session State Init ---
+# --- Session Defaults ---
 if "guest" not in st.session_state:
     st.session_state["guest"] = False
 if "guest_question_count" not in st.session_state:
     st.session_state["guest_question_count"] = 0
 
-# --- Token Authentication ---
+# --- Auth Token from Firebase ---
 query_params = st.query_params
 token = query_params.get("token", [None])[0]
 user_email = None
@@ -80,7 +81,7 @@ if token:
         user_email = decoded_token.get("email")
         st.session_state["guest"] = False
         st.success(f"✅ Logged in as {user_email}")
-    except Exception as e:
+    except Exception:
         st.warning("⚠️ Invalid or expired token. Please sign in again.")
         st.stop()
 elif not st.session_state["guest"]:
@@ -108,20 +109,21 @@ elif not st.session_state["guest"]:
 
     st.stop()
 
-# --- Guest User Banner ---
+# --- Guest Mode Indicator ---
 if st.session_state["guest"]:
     st.info("You're using Guest Mode. You can ask up to 5 questions.")
     st.caption(f"Guest questions used: {st.session_state['guest_question_count']} / 5")
 
-# --- Chat Input ---
+# --- Chat Interface ---
 user_input = st.chat_input("Ask me anything about herbs, teas, or healing...")
 if user_input:
     if st.session_state["guest"]:
         st.session_state["guest_question_count"] += 1
         if st.session_state["guest_question_count"] > 5:
-            st.error("❌ Guest limit reached. Please sign in with Google for unlimited access.")
+            st.error("❌ Guest limit reached. Sign in with Google for unlimited access.")
             st.stop()
 
+    # Display user's question
     st.markdown(f"""
     <div class="message-bubble">
         🧠 <strong>You asked:</strong><br>{user_input}
@@ -140,6 +142,7 @@ if user_input:
                 messages=[{"role": "user", "content": user_input}]
             )
             reply = response.choices[0].message.content
+            # Display bot's response
             st.markdown(f"""
             <div class="message-bubble">
                 🌿 <strong>Bot replied:</strong><br>{reply}
@@ -148,9 +151,9 @@ if user_input:
         except Exception as e:
             st.error(f"🛑 OpenAI API error: {e}")
     else:
-        st.error("Missing Azure OpenAI configuration.")
+        st.error("❌ Azure OpenAI configuration is missing.")
 
-# --- Plant ID Upload ---
+# --- Plant ID Section ---
 uploaded_file = st.file_uploader("Upload an herb or fruit photo for identification", type=["jpg", "png", "jpeg"])
 if uploaded_file:
     st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
@@ -158,7 +161,7 @@ if uploaded_file:
 
     plant_id_key = os.getenv("PLANT_ID")
     if not plant_id_key:
-        st.error("❌ Missing Plant ID API key.")
+        st.error("❌ Plant ID API key is missing.")
     else:
         files = {"images": uploaded_file.getvalue()}
         headers = {"Api-Key": plant_id_key}
@@ -176,4 +179,4 @@ if uploaded_file:
             else:
                 st.error(f"❌ Plant ID API error: {res.status_code}")
         except Exception as e:
-            st.error(f"❌ Identification error: {e}")
+            st.error(f"❌ Plant identification failed: {e}")
