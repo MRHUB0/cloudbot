@@ -43,10 +43,19 @@ if token:
         user_email = decoded_token.get("email")
         st.success(f"✅ Logged in as {user_email}")
     except Exception as e:
-        st.warning("⚠️ Invalid or expired token. Please [log in again](https://naturespleasuress.web.app/login.html).")
+        st.warning("⚠️ Invalid or expired token. Please refresh or try again.")
         st.stop()
 else:
-    st.warning("🔒 You are not logged in. Please [click here to log in](https://naturespleasuress.web.app/login.html).")
+    login_popup = """
+    <script>
+      function openLoginPopup() {
+        window.open("https://naturespleasuress.web.app/login.html", "_blank", "width=500,height=600");
+      }
+    </script>
+    <button onclick="openLoginPopup()" style="padding: 10px 18px; font-size: 16px; cursor: pointer;">🔐 Sign in with Google</button>
+    """
+    st.warning("🔒 You are not logged in.")
+    st.components.v1.html(login_popup, height=100)
     st.stop()
 
 # --- Chat Input ---
