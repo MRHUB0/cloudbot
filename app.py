@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
-# --- Load environment variables ---
+# --- Environment Setup ---
 load_dotenv()
 
 # --- Firebase Initialization ---
@@ -29,12 +29,41 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 
-# --- Page Setup ---
-st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿")
+# --- Page Styling ---
+st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿", layout="centered")
+
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f4f8f3;
+    }
+    .stButton > button {
+        background-color: #4caf50;
+        color: white;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-weight: bold;
+    }
+    .stChatInputContainer {
+        background-color: #fffaf0;
+        border-radius: 8px;
+    }
+    .message-bubble {
+        border: 1px solid #ccc;
+        padding: 12px;
+        border-radius: 12px;
+        background: #f1f8e9;
+        margin: 10px 0;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- Header & Logo ---
+st.image("logo.jpg", width=120)
 st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Welcome! Ask about herbal remedies, upload an herb/fruit photo for ID, or explore RSS articles.")
 
-# --- Session defaults ---
+# --- Session State Init ---
 if "guest" not in st.session_state:
     st.session_state["guest"] = False
 if "guest_question_count" not in st.session_state:
@@ -49,7 +78,7 @@ if token:
     try:
         decoded_token = auth.verify_id_token(token)
         user_email = decoded_token.get("email")
-        st.session_state["guest"] = False  # authenticated user
+        st.session_state["guest"] = False
         st.success(f"✅ Logged in as {user_email}")
     except Exception as e:
         st.warning("⚠️ Invalid or expired token. Please sign in again.")
@@ -75,11 +104,11 @@ elif not st.session_state["guest"]:
 
     if st.button("👤 Continue as Guest"):
         st.session_state["guest"] = True
-        st.rerun()  # ✅ Updated for Streamlit 1.30+
+        st.rerun()
 
     st.stop()
 
-# --- Guest User Notice ---
+# --- Guest User Banner ---
 if st.session_state["guest"]:
     st.info("You're using Guest Mode. You can ask up to 5 questions.")
     st.caption(f"Guest questions used: {st.session_state['guest_question_count']} / 5")
@@ -93,7 +122,11 @@ if user_input:
             st.error("❌ Guest limit reached. Please sign in with Google for unlimited access.")
             st.stop()
 
-    st.write(f"🧠 You asked: {user_input}")
+    st.markdown(f"""
+    <div class="message-bubble">
+        🧠 <strong>You asked:</strong><br>{user_input}
+    </div>
+    """, unsafe_allow_html=True)
 
     if AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY and DEPLOYMENT_NAME:
         client = AzureOpenAI(
@@ -107,7 +140,11 @@ if user_input:
                 messages=[{"role": "user", "content": user_input}]
             )
             reply = response.choices[0].message.content
-            st.success(reply)
+            st.markdown(f"""
+            <div class="message-bubble">
+                🌿 <strong>Bot replied:</strong><br>{reply}
+            </div>
+            """, unsafe_allow_html=True)
         except Exception as e:
             st.error(f"🛑 OpenAI API error: {e}")
     else:
