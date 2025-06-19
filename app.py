@@ -41,7 +41,7 @@ st.session_state.setdefault("guest_question_count", 0)
 st.session_state.setdefault("saved", [])
 
 # Auth Handling
-query_params = st.query_params()
+query_params = st.query_params
 token = query_params.get("token", [None])[0]
 user_email = None
 
