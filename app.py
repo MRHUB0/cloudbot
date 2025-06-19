@@ -16,7 +16,7 @@ firebase_json_raw = os.environ.get("FIREBASE_ADMIN_JSON")
 if firebase_json_raw:
     try:
         firebase_json = json.loads(firebase_json_raw)
-        firebase_json["private_key"] = firebase_json["private_key"].replace("\n", "\n")
+        firebase_json["private_key"] = firebase_json["private_key"].replace("\\n", "\n")
         cred = credentials.Certificate(firebase_json)
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -29,18 +29,18 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 
-# App Configuration
+# Page Configuration
 st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿")
 st.image("logo.jpg", width=150)
 st.title("🌿 Nature's Pleasure Bot")
 st.markdown("Ask about herbal remedies, upload a plant photo, or explore herbal news!")
 
-# Session Defaults
+# Session State
 st.session_state.setdefault("guest", False)
 st.session_state.setdefault("guest_question_count", 0)
 st.session_state.setdefault("saved", [])
 
-# Auth Token
+# Auth Handling
 query_params = st.query_params()
 token = query_params.get("token", [None])[0]
 user_email = None
@@ -51,7 +51,7 @@ if token:
         user_email = decoded_token.get("email")
         st.success(f"✅ Logged in as {user_email}")
     except:
-        st.warning("⚠️ Invalid token. Continue as guest or re-login.")
+        st.warning("⚠️ Invalid or expired token. Please refresh or log in again.")
         if st.button("Continue as Guest"):
             st.session_state["guest"] = True
         else:
@@ -63,7 +63,7 @@ elif not st.session_state["guest"]:
         st.markdown("[🔐 Sign in with Google](login.html)")
         st.stop()
 
-# Guided Prompts
+# Prompt Shortcuts
 st.markdown("### 🌟 Try a Quick Prompt")
 col1, col2 = st.columns(2)
 with col1:
@@ -77,6 +77,7 @@ with col2:
     if st.button("🧘 Stress Relief"):
         st.session_state["preset_input"] = "What teas help with stress and anxiety?"
 
+# Chat Input
 user_input = st.chat_input("Ask me anything about herbs, teas, or healing...")
 if st.session_state.get("preset_input"):
     user_input = st.session_state.pop("preset_input")
@@ -88,7 +89,7 @@ if user_input:
             st.error("❌ Guest limit reached. Sign in for unlimited access.")
             st.stop()
 
-    st.write(f"🧠 You asked: {user_input}")
+    st.markdown(f"💬 **You asked:** {user_input}")
 
     if AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY and DEPLOYMENT_NAME:
         client = AzureOpenAI(
@@ -102,7 +103,7 @@ if user_input:
                 messages=[{"role": "user", "content": user_input}]
             )
             reply = response.choices[0].message.content
-            st.markdown(f"🪴 **Response:** {reply}")
+            st.markdown(f"🌱 **Bot replied:** {reply}")
             if st.button("❤️ Save this tip"):
                 st.session_state["saved"].append(reply)
         except Exception as e:
@@ -110,13 +111,13 @@ if user_input:
     else:
         st.error("Azure OpenAI is not configured.")
 
-# Image Upload for Plant ID
+# Image Upload
 uploaded_file = st.file_uploader("Upload a plant photo", type=["jpg", "png", "jpeg"])
 if uploaded_file:
     st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
     plant_id_key = os.getenv("PLANT_ID")
     if not plant_id_key:
-        st.error("Missing Plant ID API Key.")
+        st.error("Missing Plant ID API key.")
     else:
         files = {"images": uploaded_file.getvalue()}
         headers = {"Api-Key": plant_id_key}
@@ -128,11 +129,11 @@ if uploaded_file:
                     suggestion = result["suggestions"][0]
                     name = suggestion.get("plant_name", "Unknown")
                     sci = suggestion.get("plant_details", {}).get("scientific_name", "Unknown")
-                    st.success(f"🌱 Identified: {name} ({sci})")
+                    st.success(f"🌿 Identified: {name} ({sci})")
                 else:
-                    st.warning("Couldn't identify the plant.")
+                    st.warning("Couldn't confidently identify the plant.")
             else:
-                st.error(f"API returned: {res.status_code}")
+                st.error(f"API error: {res.status_code}")
         except Exception as e:
             st.error(f"Plant ID Error: {e}")
 
@@ -142,7 +143,7 @@ if st.session_state["saved"]:
     for tip in st.session_state["saved"]:
         st.markdown(f"- {tip}")
 
-# RSS Herbal News
+# RSS Feed
 st.markdown("### 📰 Herbal News")
 feed = feedparser.parse("https://www.herbalgram.org/rss.aspx")
 for entry in feed.entries[:3]:
