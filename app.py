@@ -6,7 +6,6 @@ import json
 import requests
 from dotenv import load_dotenv
 from openai import AzureOpenAI
-import feedparser
 
 # Load environment variables
 load_dotenv()
@@ -33,7 +32,7 @@ DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 st.set_page_config(page_title="Nature's Pleasure Bot", page_icon="🌿")
 st.image("logo.jpg", width=150)
 st.title("🌿 Nature's Pleasure Bot")
-st.markdown("Ask about herbal remedies, upload a plant photo, or explore herbal news!")
+st.markdown("Ask about herbal remedies, upload a plant photo, or explore healing tips!")
 
 # Session State
 st.session_state.setdefault("guest", False)
@@ -142,9 +141,3 @@ if st.session_state["saved"]:
     st.markdown("### ⭐ Your Saved Tips")
     for tip in st.session_state["saved"]:
         st.markdown(f"- {tip}")
-
-# RSS Feed
-st.markdown("### 📰 Herbal News")
-feed = feedparser.parse("https://www.herbalgram.org/rss.aspx")
-for entry in feed.entries[:3]:
-    st.markdown(f"🔗 [{entry.title}]({entry.link})")
